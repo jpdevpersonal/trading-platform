@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+body { @apply min-h-screen bg-slate-50 font-sans text-slate-900; }
+h1 { @apply my-3 text-4xl font-bold tracking-tight sm:text-5xl; }
+.eyebrow { @apply text-xs font-bold tracking-widest text-teal-800 uppercase; }
+.panel { @apply max-w-2xl rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7; }
+.indicator { @apply size-2.5 rounded-full bg-slate-500; }
+.indicator.healthy { @apply bg-teal-700; }
+.indicator.unavailable { @apply bg-amber-700; }
+button { @apply cursor-pointer rounded border border-slate-400 px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:cursor-wait disabled:text-slate-500; }
+:focus-visible { outline: 3px solid #007b79; outline-offset: 3px; }
+.skip-link { @apply sr-only focus:not-sr-only focus:absolute focus:z-10 focus:bg-white focus:p-3; }
