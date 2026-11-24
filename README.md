@@ -1,6 +1,6 @@
 # AI Trading Assistant
 
-A local workspace for human-led stock research. Milestone 1 delivers a browser dashboard, four navigation placeholders, a versioned API and PostgreSQL. It does not fetch market data, connect to brokers or submit orders.
+A local workspace for human-led stock research. It includes a browser dashboard, four read-only workspace previews, a versioned API and PostgreSQL infrastructure. It does not fetch market data, connect to brokers or submit orders.
 
 ## First run
 
@@ -66,7 +66,18 @@ cd frontend
 npm run dev
 ```
 
-Open **http://localhost:3000** (or **http://127.0.0.1:3000**). The frontend binds explicitly to IPv4 loopback (`127.0.0.1`) so its listener does not depend on whether the operating system resolves `localhost` to IPv4 or IPv6. Both local frontend origins are explicitly allowed, including development hot reload. Dashboard should say **Connected to API**. Screener, Watchlists, Portfolio and Research are intentionally empty destinations. Tab to skip navigation or activate a link with Enter. Stop the API and select **Check again** to see **API unavailable**; restart it and retry to recover.
+Open **http://localhost:3000** (or **http://127.0.0.1:3000**). The frontend binds explicitly to IPv4 loopback (`127.0.0.1`) so its listener does not depend on whether the operating system resolves `localhost` to IPv4 or IPv6. Both local frontend origins are explicitly allowed, including development hot reload.
+
+Dashboard (`/`) links to four previews. **Sample data** means the instruments, quantities and notes are fictional, not market or account data. The previews are read-only and available without the API.
+
+| Route | Preview |
+| --- | --- |
+| `/screener` | Three sample instruments grouped by sector |
+| `/watchlists` | One example list built from the same three instruments |
+| `/portfolio` | Three fictional positions with illustrative quantities |
+| `/research` | Two research notes linked to fictional instruments |
+
+Use the desktop navigation rail or the wrapped navigation above the content on narrow screens. Press Tab to reach **Skip to main content** and Enter to activate it. Dashboard should say **Connected to API** when the local API process responds. Stop the API and select **Check again** to see **API unavailable**; restart it and retry to recover. The panel checks process health, not database readiness.
 
 | Local endpoint | What it verifies |
 | --- | --- |
@@ -142,4 +153,4 @@ dotnet ef migrations script --project "$infra" --startup-project "$api"
 dotnet ef database update --project "$infra" --startup-project "$api"
 ```
 
-See the [architecture](docs/architecture.md), [engineering standards](docs/engineering-standards.md), [milestone spec](docs/milestones/01-foundation.md) and [verification report](docs/milestones/01-foundation-verification.md).
+See the [architecture](docs/architecture.md), [engineering standards](docs/engineering-standards.md) and [milestone index](docs/milestones.md) for specifications and verification reports.
