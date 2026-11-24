@@ -1,0 +1,53 @@
+name: Foundation
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.12
+        env:
+          POSTGRES_DB: trading_assistant_test
+          POSTGRES_USER: trading_test
+          POSTGRES_PASSWORD: dummy_test_only
+        ports:
+          - 127.0.0.1:55432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U trading_test -d trading_assistant_test"
+          --health-interval 2s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: dotnet restore --locked-mode
+      - run: dotnet build --no-restore
+      - run: dotnet format --verify-no-changes --no-restore
+      - run: dotnet test --no-build
+        env:
+          TRADING_TEST_CONNECTION: Host=127.0.0.1;Port=55432;Database=trading_assistant_test;Username=trading_test;Password=dummy_test_only
+      - name: Install and verify frontend
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:5080
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run test
+          npm run build
+      - name: Chromium smoke test with live application servers
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:e2e

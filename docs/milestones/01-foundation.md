@@ -2,7 +2,7 @@
 
 **ID** M01  
 **Specification** v1.0  
-**Status** Ready for implementation. All checks are pending.
+**Status** Implemented locally. See the [acceptance report](01-foundation-verification.md); hosted PR evidence and owner approval are pending.
 
 ## 1. Objective
 
