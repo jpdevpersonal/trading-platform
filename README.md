@@ -66,7 +66,7 @@ cd frontend
 npm run dev
 ```
 
-Open **http://localhost:3000** (or **http://127.0.0.1:3000**). Both local frontend origins are explicitly allowed, including development hot reload. Dashboard should say **Connected to API**. Screener, Watchlists, Portfolio and Research are intentionally empty destinations. Tab to skip navigation or activate a link with Enter. Stop the API and select **Check again** to see **API unavailable**; restart it and retry to recover.
+Open **http://localhost:3000** (or **http://127.0.0.1:3000**). The frontend binds explicitly to IPv4 loopback (`127.0.0.1`) so its listener does not depend on whether the operating system resolves `localhost` to IPv4 or IPv6. Both local frontend origins are explicitly allowed, including development hot reload. Dashboard should say **Connected to API**. Screener, Watchlists, Portfolio and Research are intentionally empty destinations. Tab to skip navigation or activate a link with Enter. Stop the API and select **Check again** to see **API unavailable**; restart it and retry to recover.
 
 | Local endpoint | What it verifies |
 | --- | --- |
