@@ -4,11 +4,13 @@ A local workspace for human-led stock research. Milestone 1 delivers a browser d
 
 ## First run
 
-Use Git, Bash, the **.NET 10.0.404 SDK**, **Node 24.22.3** (bundled npm 11.19.1), and a running Docker Engine with Compose v2.20+ (`include` support). Open the checkout in VS Code with Copilot for the repository workflow. The [SDK pin](global.json), [Node pin](.nvmrc), NuGet locks and [npm lockfile](frontend/package-lock.json) are also used in CI. On Linux, install Playwright's Chromium system libraries if prompted.
+Use Git, Bash, the **.NET 10.0.404 SDK**, **Node 24.22.3** (bundled npm 11.19.1), and a running Docker Engine with Compose v2.20+ (`include` support). The one-command launcher supports Linux/WSL and uses `curl` and `setsid` (util-linux). Open the checkout in VS Code with Copilot for the repository workflow. The [SDK pin](global.json), [Node pin](.nvmrc), NuGet locks and [npm lockfile](frontend/package-lock.json) are also used in CI. On Linux, install Playwright's Chromium system libraries if prompted.
 
 From the repository root, with the pinned .NET SDK on `PATH`:
 
 ```bash
+# If .NET is installed in ~/.dotnet rather than on PATH:
+# export DOTNET_ROOT="$HOME/.dotnet"; export PATH="$DOTNET_ROOT:$PATH"
 dotnet --version
 nvm install                    # if using nvm; repeat `nvm use` in new shells
 node --version
@@ -25,6 +27,28 @@ dotnet restore --locked-mode
 ```
 
 The examples use **dummy, local-only credentials**. Keep actual values in the ignored copies. The root `.env` configures Compose; **`dotnet run` does not load it**. Match the database, user, password and port in `backend/.env` to the Compose settings. Only the public API origin belongs in `frontend/.env.local`; `NEXT_PUBLIC_*` values are visible to the browser and fixed at build time.
+
+## Everyday development: one command
+
+From the repository root:
+
+```bash
+./scripts/dev.sh
+```
+
+The [launcher](scripts/dev.sh) selects the pinned runtimes from `PATH`, falling back to Node in `${NVM_DIR:-$HOME/.nvm}` and .NET in `${DOTNET_ROOT:-$HOME/.dotnet}`. It checks local settings, restored dependencies, Docker and free application ports before starting anything. It never installs dependencies, overwrites configuration, or stops existing applications.
+
+It starts PostgreSQL with Compose, loads `backend/.env` **only into the API process**, and starts the API and frontend together with logs in the same terminal. It reports **Ready** after API health, database readiness and the frontend respond. Open **http://localhost:3000**.
+
+Press **Ctrl+C** once to stop the frontend and API, including their child processes. If either service exits or startup fails, the other is stopped too. PostgreSQL stays running and its volume is never deleted. Stop it separately when finished:
+
+```bash
+docker compose stop postgres
+```
+
+The launcher uses frontend port **3000**. An alternate API port is supported if `ASPNETCORE_URLS` in `backend/.env` and `NEXT_PUBLIC_API_BASE_URL` in `frontend/.env.local` match exactly (one loopback HTTP origin). Keep `FrontendOrigin=http://localhost:3000`. For other frontend ports or platforms without `setsid`, use the manual commands below.
+
+### Manual startup (alternative)
 
 **Terminal 1, root** — wait for PostgreSQL to accept TCP connections, then run the API in the foreground:
 
@@ -51,9 +75,16 @@ Open **http://localhost:3000** (or **http://127.0.0.1:3000**). Both local fronte
 | `GET http://localhost:5080/openapi/v1.json` | API document, Development only |
 | `127.0.0.1:5432` | PostgreSQL 17.12, loopback only, Compose-managed named volume |
 
-**Shutdown:** Ctrl+C each foreground process, then `docker compose down` from root. This retains the database volume. Do **not** add `-v` to normal shutdown.
+**Manual shutdown:** Ctrl+C each foreground process, then `docker compose down` from root. This retains the database volume. Do **not** add `-v` to normal shutdown.
 
 ## Tests
+
+Launcher regression tests use Node's built-in test runner (no extra dependencies or real Docker services). With the pinned Node active and application ports 3000/5080 free, run from root:
+
+```bash
+bash -n scripts/dev.sh
+node --test scripts/dev.test.mjs
+```
 
 Run backend tests against a **separate, disposable real PostgreSQL**, not the development database. From root:
 
