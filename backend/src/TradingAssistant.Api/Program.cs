@@ -7,8 +7,10 @@ using TradingAssistant.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration["urls"] ??= "http://localhost:5080";
 var origin = LocalOrigin.Parse(builder.Configuration["FrontendOrigin"]);
+var additionalOrigins = builder.Configuration.GetSection("AdditionalFrontendOrigins").Get<string[]>() ?? [];
+var origins = new[] { origin }.Concat(additionalOrigins.Select(LocalOrigin.Parse)).ToArray();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
-    policy.WithOrigins(origin).WithMethods("GET").WithHeaders("Accept")));
+    policy.WithOrigins(origins).WithMethods("GET").WithHeaders("Accept")));
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddPersistence(builder.Configuration.GetConnectionString("TradingAssistant"));

@@ -72,7 +72,10 @@ public class ApiTests
 
     [Theory]
     [InlineData(Origin, true)]
+    [InlineData("http://127.0.0.1:3000", true)]
     [InlineData("http://localhost:3999", false)]
+    [InlineData("http://127.0.0.1:3999", false)]
+    [InlineData("http://localhost.example.com:3000", false)]
     public async Task CorsRestrictsRequestsAndPreflights(string origin, bool allowed)
     {
         using var api = new Api();
@@ -88,7 +91,7 @@ public class ApiTests
             Assert.Equal(allowed, response.Headers.Contains("Access-Control-Allow-Origin"));
             if (allowed)
             {
-                Assert.Equal(Origin, Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
+                Assert.Equal(origin, Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
             }
         }
         if (allowed)

@@ -42,7 +42,7 @@ cd frontend
 npm run dev
 ```
 
-Open **http://localhost:3000**. Dashboard should say **Connected to API**. Screener, Watchlists, Portfolio and Research are intentionally empty destinations. Tab to skip navigation or activate a link with Enter. Stop the API and select **Check again** to see **API unavailable**; restart it and retry to recover.
+Open **http://localhost:3000** (or **http://127.0.0.1:3000**). Both local frontend origins are explicitly allowed, including development hot reload. Dashboard should say **Connected to API**. Screener, Watchlists, Portfolio and Research are intentionally empty destinations. Tab to skip navigation or activate a link with Enter. Stop the API and select **Check again** to see **API unavailable**; restart it and retry to recover.
 
 | Local endpoint | What it verifies |
 | --- | --- |
@@ -89,7 +89,7 @@ On a fresh Linux machine use `npx playwright install --with-deps chromium` if sy
 ## Configuration and troubleshooting
 
 - **Wrong runtime:** `dotnet --list-sdks` must include the exact pinned SDK. If installed in a private directory, export `DOTNET_ROOT` to that directory and prepend it to `PATH`. Use `nvm use` from the root to select the pinned Node runtime.
-- **Port conflicts / CORS:** stop conflicting processes or change `POSTGRES_PORT`, the API connection string, `ASPNETCORE_URLS`, `FrontendOrigin`, or `NEXT_PUBLIC_API_BASE_URL` as appropriate. For example, start the web app with `npm run dev -- --port 3001` and set `FrontendOrigin=http://localhost:3001` for the API. Origins must match exactly, with no trailing slash; `localhost` and `127.0.0.1` are different origins. Reload environment settings and restart the affected processes after edits. Do not expose these unauthenticated services publicly.
+- **Port conflicts / CORS:** stop conflicting processes or change `POSTGRES_PORT`, the API connection string, `ASPNETCORE_URLS`, `FrontendOrigin`, or `NEXT_PUBLIC_API_BASE_URL` as appropriate. For example, start the web app with `npm run dev -- --port 3001` and set `FrontendOrigin=http://localhost:3001` for the API. To also use the numeric hostname on that port, set `AdditionalFrontendOrigins__0=http://127.0.0.1:3001` in the API environment. The default additional origin is `http://127.0.0.1:3000`; it remains allowed unless overridden. Every configured origin is validated as a loopback HTTP(S) origin. Origins must match exactly, with no trailing slash; `localhost` and `127.0.0.1` are different origins. Reload environment settings and restart the affected processes after edits. Do not expose these unauthenticated services publicly.
 - **Unavailable database:** run `docker compose ps`, verify the listener and check the API shell settings. PostgreSQL initializes credentials only on a new volume; changing `.env` does not update an existing database user. Avoid printing resolved Compose configuration or connection strings. `docker compose stop postgres` and `docker compose up -d --wait` let you exercise an outage without deleting data.
 - **Unavailable API:** check `/api/v1/health` directly, then the browser's configured origin and CORS settings. The dashboard checks on mount and on **Check again**, not continuously.
 

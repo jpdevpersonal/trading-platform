@@ -1,13 +1,19 @@
 import { expect, test } from "@playwright/test";
 
-test("dashboard reports the running API's response", async ({ page }) => {
-  const health = page.waitForResponse("http://localhost:5080/api/v1/health");
-  await page.goto("/");
-  await expect(page.getByRole("banner")).toBeVisible();
-  await expect(page.getByRole("main").getByRole("heading", { name: "Dashboard" })).toBeVisible();
-  expect(await (await health).json()).toEqual({ status: "healthy" });
-  await expect(page.getByRole("status").filter({ hasText: "Connected to API" })).toBeVisible();
-});
+for (const origin of ["http://localhost:3000", "http://127.0.0.1:3000"]) {
+  test(`dashboard connects to the API and dev WebSocket from ${origin}`, async ({ page }) => {
+    const health = page.waitForResponse(async (response) =>
+      response.url() === "http://localhost:5080/api/v1/health" && await response.finished() === null);
+    const hmr = page.waitForEvent("websocket", (socket) => socket.url().includes("/_next/hmr"))
+      .then((socket) => socket.waitForEvent("framereceived"));
+    await page.goto(origin);
+    await hmr;
+    await expect(page.getByRole("banner")).toBeVisible();
+    await expect(page.getByRole("main").getByRole("heading", { name: "Dashboard" })).toBeVisible();
+    expect(await (await health).json()).toEqual({ status: "healthy" });
+    await expect(page.getByRole("status").filter({ hasText: "Connected to API" })).toBeVisible();
+  });
+}
 
 test("narrow shell supports keyboard entry and each destination", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
