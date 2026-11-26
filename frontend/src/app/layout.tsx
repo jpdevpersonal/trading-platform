@@ -14,15 +14,19 @@ export default function Layout({ children }: { children: ReactNode }) {
       <body>
         <a href="#main" className="skip-link">Skip to main content</a>
         <header className="border-b border-slate-200 bg-white">
-          <div className="mx-auto max-w-5xl px-5">
+          <div className="mx-auto max-w-6xl px-5">
             <div className="flex flex-wrap items-center justify-between gap-3 py-5">
               <span className="text-xl font-bold tracking-tight">Trading Assistant</span>
               <span className="eyebrow">Local workspace</span>
             </div>
-            <Navigation />
           </div>
         </header>
-        <main id="main" tabIndex={-1} className="mx-auto max-w-5xl px-5 py-10 sm:py-16">{children}</main>
+        <div className="mx-auto grid max-w-6xl px-5 lg:grid-cols-[12rem_minmax(0,1fr)]">
+          <Navigation />
+          <main id="main" tabIndex={-1} className="min-w-0 py-10 sm:py-16 lg:pl-10">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   );
