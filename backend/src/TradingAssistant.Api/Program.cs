@@ -13,6 +13,7 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.WithOrigins(origins).WithMethods("GET").WithHeaders("Accept")));
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+builder.Services.AddScoped<InstrumentCatalogue>();
 builder.Services.AddPersistence(builder.Configuration.GetConnectionString("TradingAssistant"));
 
 var app = builder.Build();
@@ -37,6 +38,7 @@ if (app.Environment.IsDevelopment())
 }
 
 var api = app.MapGroup("/api/v1");
+api.MapInstruments();
 api.MapGet("/health", () => new StatusResponse("healthy"));
 api.MapGet("/ready", async (IDatabaseReadiness database, CancellationToken token) =>
     await database.CanConnectAsync(token)
