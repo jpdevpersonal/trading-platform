@@ -1,6 +1,6 @@
 # AI Trading Assistant
 
-A local workspace for human-led stock research. It includes a browser dashboard, four read-only workspace previews, a versioned API and PostgreSQL infrastructure. It does not fetch market data, connect to brokers or submit orders.
+A local workspace for human-led stock research. It includes a browser dashboard, four read-only workspace previews and a versioned, PostgreSQL-backed instrument catalogue API. It does not fetch market data, connect to brokers or submit orders.
 
 ## First run
 
@@ -39,6 +39,8 @@ From the repository root:
 The [launcher](scripts/dev.sh) selects the pinned runtimes from `PATH`, falling back to Node in `${NVM_DIR:-$HOME/.nvm}` and .NET in `${DOTNET_ROOT:-$HOME/.dotnet}`. It checks local settings, restored dependencies, Docker and free application ports before starting anything. It never installs dependencies, overwrites configuration, or stops existing applications.
 
 It starts PostgreSQL with Compose, loads `backend/.env` **only into the API process**, and starts the API and frontend together with logs in the same terminal. It reports **Ready** after API health, database readiness and the frontend respond. Open **http://localhost:3000**.
+
+Readiness checks connectivity, not the application schema. The launcher never migrates or imports data. Follow [Persistence and migrations](#persistence-and-migrations) once to enable the instrument routes; the optional demo import is a separate step. The browser previews remain independent of this catalogue.
 
 Press **Ctrl+C** once to stop the frontend and API, including their child processes. If either service exits or startup fails, the other is stopped too. PostgreSQL stays running and its volume is never deleted. Stop it separately when finished:
 
@@ -82,7 +84,9 @@ Use the desktop navigation rail or the wrapped navigation above the content on n
 | Local endpoint | What it verifies |
 | --- | --- |
 | `GET http://localhost:5080/api/v1/health` | Process only: `200 {"status":"healthy"}`, even with PostgreSQL stopped |
-| `GET http://localhost:5080/api/v1/ready` | A bounded SQL round trip: `200 {"status":"ready"}` or `503 {"status":"unavailable"}` |
+| `GET http://localhost:5080/api/v1/ready` | A bounded SQL round trip, not a schema check: `200 {"status":"ready"}` or `503 {"status":"unavailable"}` |
+| `GET http://localhost:5080/api/v1/instruments` | Migrated catalogue, ordered and paginated; defaults to offset 0, limit 50 |
+| `GET http://localhost:5080/api/v1/instruments/{id}` | One instrument by nonempty hyphenated UUID, or `404` |
 | `GET http://localhost:5080/openapi/v1.json` | API document, Development only |
 | `127.0.0.1:5432` | PostgreSQL 17.12, loopback only, Compose-managed named volume |
 
@@ -113,7 +117,7 @@ docker stop trading-assistant-m01-test
 unset TRADING_TEST_CONNECTION
 ```
 
-Alternatively, supply an explicit isolated loopback PostgreSQL database with a name ending in `_test`. Missing configuration, a wrong target or an unreachable test database fails the relevant test; it is not skipped. `timeout` is GNU coreutils (use `gtimeout` on macOS).
+Alternatively, supply an explicit isolated loopback PostgreSQL database with a name ending in `_test`. Missing configuration, a wrong target or an unreachable test database fails the relevant test; it is not skipped. Each catalogue test creates and drops only its own uniquely named schema in that database. Tests apply the actual migration and repository SQL fixture, including identity constraints, repeat imports, collision rollback, paging and safe HTTP errors. No development schema or volume is used. `timeout` is GNU coreutils (use `gtimeout` on macOS).
 
 From `frontend/`, with the manually started API and Next.js **stopped**:
 
@@ -133,24 +137,85 @@ On a fresh Linux machine use `npx playwright install --with-deps chromium` if sy
 - **Wrong runtime:** `dotnet --list-sdks` must include the exact pinned SDK. If installed in a private directory, export `DOTNET_ROOT` to that directory and prepend it to `PATH`. Use `nvm use` from the root to select the pinned Node runtime.
 - **Port conflicts / CORS:** stop conflicting processes or change `POSTGRES_PORT`, the API connection string, `ASPNETCORE_URLS`, `FrontendOrigin`, or `NEXT_PUBLIC_API_BASE_URL` as appropriate. For example, start the web app with `npm run dev -- --port 3001` and set `FrontendOrigin=http://localhost:3001` for the API. To also use the numeric hostname on that port, set `AdditionalFrontendOrigins__0=http://127.0.0.1:3001` in the API environment. The default additional origin is `http://127.0.0.1:3000`; it remains allowed unless overridden. Every configured origin is validated as a loopback HTTP(S) origin. Origins must match exactly, with no trailing slash; `localhost` and `127.0.0.1` are different origins. Reload environment settings and restart the affected processes after edits. Do not expose these unauthenticated services publicly.
 - **Unavailable database:** run `docker compose ps`, verify the listener and check the API shell settings. PostgreSQL initializes credentials only on a new volume; changing `.env` does not update an existing database user. Avoid printing resolved Compose configuration or connection strings. `docker compose stop postgres` and `docker compose up -d --wait` let you exercise an outage without deleting data.
+- **Instrument routes return `500` while readiness is `200`:** confirm the intended database and run `dotnet ef migrations list` with the project arguments below. A reachable database without the application migration is ready but cannot serve catalogue queries. Errors deliberately omit SQL and connection details. Apply the reviewed migration explicitly, not from startup.
+- **Empty catalogue:** `200 {"items":[],"offset":0,"limit":50}` is normal after migration or beyond the last page. Import the optional fixtures only if desired. An empty backend catalogue does not remove or change the M02 browser previews.
 - **Unavailable API:** check `/api/v1/health` directly, then the browser's configured origin and CORS settings. The dashboard checks on mount and on **Check again**, not continuously.
 
 ## Persistence and migrations
 
-[Infrastructure](backend/src/TradingAssistant.Infrastructure) owns the EF Core context and Npgsql provider. M01 has no business tables, seed rows or migrations. Startup never modifies the schema.
+[Infrastructure](backend/src/TradingAssistant.Infrastructure) owns the EF Core context, mappings, Npgsql reader and [initial migration](backend/src/TradingAssistant.Infrastructure/Migrations/20261126204038_InitialInstruments.cs). Domain validates instrument creation; Application owns the read port and catalogue use cases. Startup, health and readiness never modify the schema or insert data.
 
-**When a later milestone authorizes a schema change**, load the intended API environment, restore the pinned CLI and confirm the target before generating, reviewing and explicitly applying the migration:
+### Apply the schema explicitly
+
+From root, start the intended local PostgreSQL and load its matching backend environment. Confirm the database name and loopback data source shown by `dbcontext info` before updating. For verification, use a separate disposable database ending in `_test`, never your development data.
 
 ```bash
+docker compose up -d --wait --wait-timeout 60 postgres
 set -a; . backend/.env; set +a
 dotnet tool restore
 infra=backend/src/TradingAssistant.Infrastructure
 api=backend/src/TradingAssistant.Api
 dotnet ef dbcontext info --project "$infra" --startup-project "$api"
-# Future schema work only:
-dotnet ef migrations add FirstRealSchema --project "$infra" --startup-project "$api" --output-dir Migrations
-dotnet ef migrations script --project "$infra" --startup-project "$api"
+dotnet ef migrations list --project "$infra" --startup-project "$api"
+migration_review_file=$(mktemp)
+dotnet ef migrations script --idempotent --project "$infra" --startup-project "$api" --output "$migration_review_file"
+cat "$migration_review_file"     # Review before applying.
 dotnet ef database update --project "$infra" --startup-project "$api"
+rm "$migration_review_file"
 ```
+
+Migration `20261126204038_InitialInstruments` creates an **empty** `Instruments` table. Running `database update` again is a no-op. PostgreSQL enforces all six non-null columns, a UUID primary key, maximum lengths (symbol 32, MIC 4, name 200, currency 3), required boolean provenance and unique `(ExchangeMic, Symbol)`. Domain creation additionally rejects an empty UUID, invalid ASCII character patterns, wrong code lengths and blank names; it trims display names. Registry validation and symbol history are deferred. Direct SQL writers must respect these domain rules.
+
+### Optional fictional demo import
+
+The [transactional fixture](infrastructure/seed/sample-instruments.sql) adds these sample listings, not market data:
+
+| UUID | Symbol | MIC | Name | Currency |
+| --- | --- | --- | --- | --- |
+| `10000000-0000-0000-0000-000000000001` | S-AO | XAAA | Alder Orbit (sample) | USD |
+| `10000000-0000-0000-0000-000000000002` | S-BG | XAAA | Bracken Grid (sample) | USD |
+| `10000000-0000-0000-0000-000000000003` | S-AO | XBBB | Alder Orbit alternate listing (sample) | EUR |
+
+Every imported row has `isSample: true`. XAAA and XBBB are illustrative MIC values; S-AO deliberately repeats across exchanges. These backend fixtures do not replace the independent frontend sample data.
+
+For the **intended local Compose service**, confirm its database matches the migration target, then import from root:
+
+```bash
+docker compose exec -T postgres sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "SELECT current_database();"'
+docker compose exec -T postgres sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
+  < infrastructure/seed/sample-instruments.sql
+```
+
+For a separately configured disposable instance, run `psql -v ON_ERROR_STOP=1 -f infrastructure/seed/sample-instruments.sql` with explicit local `PGHOST`, `PGPORT`, `PGDATABASE` and `PGUSER` and an ignored password file or local authentication. Do not put real credentials on the command line or in SQL.
+
+The import can be run twice: an existing MIC/symbol pair retains **all** its fields, UUID and provenance. A fixture UUID attached to another identity fails and rolls back the entire transaction, even when the matching logical row already exists. The short import locks out concurrent writers to make that check reliable. Resolve a conflict deliberately; do not delete existing rows blindly.
+
+### Query and failure examples
+
+Start the API with the same database configuration. Only GET routes exist:
+
+```bash
+base=http://localhost:5080
+sample_id=10000000-0000-0000-0000-000000000001
+curl -sS -i --max-time 15 "$base/api/v1/instruments"
+curl -sS -i --max-time 15 "$base/api/v1/instruments?offset=1&limit=1"
+curl -sS -i --max-time 15 "$base/api/v1/instruments?offset=3"
+curl -sS -i --max-time 15 "$base/api/v1/instruments/$sample_id"
+curl -sS -i --max-time 15 "$base/api/v1/instruments/20000000-0000-0000-0000-000000000001"
+curl -sS -i --max-time 15 "$base/api/v1/instruments/not-a-uuid"
+curl -sS -i --max-time 15 "$base/api/v1/instruments?limit=101"
+```
+
+A demo detail response is:
+
+```json
+{"id":"10000000-0000-0000-0000-000000000001","symbol":"S-AO","exchangeMic":"XAAA","name":"Alder Orbit (sample)","currency":"USD","isSample":true}
+```
+
+The list wraps records in `{ "items": [...], "offset": 0, "limit": 50 }` without a total count. PostgreSQL orders by MIC then symbol **before** offset/limit. Omitted values default to 0/50; offset accepts 0 through 2147483647 and limit accepts 1 through 100. Empty, repeated, overflowing or invalid pagination values return `400` Problem Details. Malformed, non-hyphenated and zero UUIDs return `400`; a valid missing UUID returns `404`. Unexpected database failures return generic `500` Problem Details. Development OpenAPI documents both routes and their payloads.
+
+HTTP cancellation flows through Application into EF Core. Connection timeout is capped at five seconds (zero/unlimited becomes five); commands are bounded to five seconds. Readiness retains its three-second deadline.
+
+For an outage check, stop only your owned local PostgreSQL with `docker compose stop postgres`: health remains `200`, readiness becomes `503`, and catalogue reads return safe `500`. Run `docker compose up -d --wait --wait-timeout 60 postgres` to recover without restarting the API. Restart the API separately and query the same UUID to confirm durability. Do not remove the development volume.
 
 See the [architecture](docs/architecture.md), [engineering standards](docs/engineering-standards.md) and [milestone index](docs/milestones.md) for specifications and verification reports.

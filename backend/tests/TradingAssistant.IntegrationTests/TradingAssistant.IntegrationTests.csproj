@@ -6,4 +6,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.15" />
     <ProjectReference Include="../../src/TradingAssistant.Api/TradingAssistant.Api.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../../../infrastructure/seed/sample-instruments.sql" Link="sample-instruments.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

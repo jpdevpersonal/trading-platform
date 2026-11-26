@@ -9,7 +9,15 @@ public static class Persistence
 {
     public static IServiceCollection AddPersistence(this IServiceCollection services, string? connectionString)
     {
-        services.AddDbContext<TradingContext>(options => options.UseNpgsql(connectionString));
+        if (!string.IsNullOrWhiteSpace(connectionString))
+        {
+            var settings = new NpgsqlConnectionStringBuilder(connectionString);
+            settings.Timeout = settings.Timeout is > 0 and <= 5 ? settings.Timeout : 5;
+            connectionString = settings.ConnectionString;
+        }
+        services.AddDbContext<TradingContext>(options =>
+            options.UseNpgsql(connectionString, postgres => postgres.CommandTimeout(5)));
+        services.AddScoped<IInstrumentReader, InstrumentReader>();
         return services.AddScoped<IDatabaseReadiness, DatabaseReadiness>();
     }
 }

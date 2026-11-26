@@ -1,12 +1,8 @@
 using System.Net;
 using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Mvc.Testing;
-using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
-using TradingAssistant.Application;
 using TradingAssistant.Infrastructure;
 using Xunit;
 
@@ -14,40 +10,18 @@ namespace TradingAssistant.IntegrationTests;
 
 public class ApiTests
 {
-    private const string Offline = "Host=127.0.0.1;Port=1;Database=offline_test;Username=test;Pooling=false";
     private const string Origin = "http://localhost:3000";
-
-    private sealed class Api(string connection = Offline, bool injectFault = false) : WebApplicationFactory<Program>
-    {
-        protected override void ConfigureWebHost(IWebHostBuilder builder)
-        {
-            builder.UseEnvironment("Development").UseSetting("ConnectionStrings:TradingAssistant", connection)
-                .UseSetting("FrontendOrigin", Origin);
-            if (injectFault)
-            {
-                builder.ConfigureTestServices(services => services.AddScoped<IDatabaseReadiness, Fault>());
-            }
-        }
-    }
-
-    private sealed class Fault : IDatabaseReadiness
-    {
-        public Task<bool> CanConnectAsync(CancellationToken cancellationToken) =>
-            throw new InvalidOperationException("private-error-sentinel");
-    }
 
     [Fact]
     public async Task RealPostgresIsReady()
     {
-        var connection = Environment.GetEnvironmentVariable("TRADING_TEST_CONNECTION");
-        Assert.False(string.IsNullOrWhiteSpace(connection), "Set TRADING_TEST_CONNECTION to an isolated PostgreSQL database (see README).");
+        var connection = PostgresDatabase.RequiredConnectionString();
         var settings = new NpgsqlConnectionStringBuilder(connection);
-        Assert.True(settings.Host is "127.0.0.1" or "localhost" && settings.Database?.EndsWith("_test", StringComparison.Ordinal) == true,
-            "Tests require a loopback PostgreSQL database ending in _test.");
-        using var api = new Api(connection);
+        settings.Timeout = settings.Timeout is > 0 and <= 5 ? settings.Timeout : 5;
+        using var api = new TestApi(connection);
         using var client = api.CreateClient();
         using var scope = api.Services.CreateScope();
-        Assert.True(scope.ServiceProvider.GetRequiredService<TradingContext>().Database.GetConnectionString() == connection,
+        Assert.True(scope.ServiceProvider.GetRequiredService<TradingContext>().Database.GetConnectionString() == settings.ConnectionString,
             "Refusing to probe a connection other than the supplied test database.");
         using var response = await client.GetAsync("/api/v1/ready");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -57,7 +31,7 @@ public class ApiTests
     [Fact]
     public async Task LivenessAndOpenApiSurviveDatabaseOutage()
     {
-        using var api = new Api();
+        using var api = new TestApi();
         using var client = api.CreateClient();
         using var ready = await client.GetAsync("/api/v1/ready");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
@@ -78,7 +52,7 @@ public class ApiTests
     [InlineData("http://localhost.example.com:3000", false)]
     public async Task CorsRestrictsRequestsAndPreflights(string origin, bool allowed)
     {
-        using var api = new Api();
+        using var api = new TestApi();
         using var client = api.CreateClient();
         client.DefaultRequestHeaders.Add("Origin", origin);
         using var health = await client.GetAsync("/api/v1/health");
@@ -104,7 +78,7 @@ public class ApiTests
     [Fact]
     public async Task UnexpectedFailureReturnsSafeProblemEvenInDevelopment()
     {
-        using var api = new Api(injectFault: true);
+        using var api = new TestApi(injectFault: true);
         using var client = api.CreateClient();
         using var response = await client.GetAsync("/api/v1/ready");
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
@@ -114,5 +88,14 @@ public class ApiTests
         Assert.Equal(500, problem.RootElement.GetProperty("status").GetInt32());
         Assert.DoesNotContain("private-error-sentinel", body);
         Assert.DoesNotContain("InvalidOperationException", body);
+    }
+
+    [Fact]
+    public async Task MissingConfigurationKeepsLivenessButNotReadiness()
+    {
+        using var api = new TestApi(connection: "");
+        using var client = api.CreateClient();
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/v1/health")).StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, (await client.GetAsync("/api/v1/ready")).StatusCode);
     }
 }
