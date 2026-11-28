@@ -18,6 +18,7 @@ public static class Persistence
         services.AddDbContext<TradingContext>(options =>
             options.UseNpgsql(connectionString, postgres => postgres.CommandTimeout(5)));
         services.AddScoped<IInstrumentReader, InstrumentReader>();
+        services.AddScoped<IDailyPriceStore, DailyPriceStore>();
         return services.AddScoped<IDatabaseReadiness, DatabaseReadiness>();
     }
 }

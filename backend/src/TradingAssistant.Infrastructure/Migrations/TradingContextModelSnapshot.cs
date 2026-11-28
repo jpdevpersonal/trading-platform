@@ -57,6 +57,99 @@ namespace TradingAssistant.Infrastructure.Migrations
 
                     b.ToTable("Instruments");
                 });
+
+            modelBuilder.Entity("TradingAssistant.Infrastructure.DailyPriceRefresh", b =>
+                {
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("From")
+                        .HasColumnType("date");
+
+                    b.Property<string>("PriceBasis")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("RefreshedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateOnly>("To")
+                        .HasColumnType("date");
+
+                    b.HasKey("InstrumentId");
+
+                    b.ToTable("DailyPriceRefreshes");
+                });
+
+            modelBuilder.Entity("TradingAssistant.Infrastructure.DailyPriceRow", b =>
+                {
+                    b.Property<Guid>("InstrumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("TradingDate")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("Close")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
+                    b.Property<decimal>("High")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
+                    b.Property<decimal>("Low")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
+                    b.Property<decimal>("Open")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
+                    b.Property<string>("PriceBasis")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<decimal>("Volume")
+                        .HasPrecision(28, 10)
+                        .HasColumnType("numeric(28,10)");
+
+                    b.HasKey("InstrumentId", "TradingDate");
+
+                    b.ToTable("DailyPrices", t =>
+                        {
+                            t.HasCheckConstraint("CK_DailyPrices_Values", "\"Low\" > 0 AND \"Open\" >= \"Low\" AND \"Close\" >= \"Low\" AND \"High\" >= \"Open\" AND \"High\" >= \"Close\" AND \"Volume\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("TradingAssistant.Infrastructure.DailyPriceRefresh", b =>
+                {
+                    b.HasOne("TradingAssistant.Domain.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TradingAssistant.Infrastructure.DailyPriceRow", b =>
+                {
+                    b.HasOne("TradingAssistant.Domain.Instrument", null)
+                        .WithMany()
+                        .HasForeignKey("InstrumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
 #pragma warning restore 612, 618
         }
     }

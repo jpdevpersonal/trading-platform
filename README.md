@@ -1,6 +1,6 @@
 # AI Trading Assistant
 
-A local workspace for human-led stock research. It includes a browser dashboard, four read-only workspace previews and a versioned, PostgreSQL-backed instrument catalogue API. It does not fetch market data, connect to brokers or submit orders.
+A local workspace for human-led stock research. It includes a browser dashboard, four read-only sample previews, a PostgreSQL-backed instrument catalogue and manual daily price history for US-listed Apple and Microsoft through Massive Stocks Basic. It never connects to brokers or submits orders.
 
 ## First run
 
@@ -72,6 +72,8 @@ Open **http://localhost:3000** (or **http://127.0.0.1:3000**). The frontend bind
 
 Dashboard (`/`) links to four previews. **Sample data** means the instruments, quantities and notes are fictional, not market or account data. The previews are read-only and available without the API.
 
+Dashboard also links to **Price history** (`/price-history`), a separate real-listing workflow. See [Daily price history](#daily-price-history-milestone-4) for explicit setup. Visiting or reloading this page never imports data.
+
 | Route | Preview |
 | --- | --- |
 | `/screener` | Three sample instruments grouped by sector |
@@ -87,6 +89,8 @@ Use the desktop navigation rail or the wrapped navigation above the content on n
 | `GET http://localhost:5080/api/v1/ready` | A bounded SQL round trip, not a schema check: `200 {"status":"ready"}` or `503 {"status":"unavailable"}` |
 | `GET http://localhost:5080/api/v1/instruments` | Migrated catalogue, ordered and paginated; defaults to offset 0, limit 50 |
 | `GET http://localhost:5080/api/v1/instruments/{id}` | One instrument by nonempty hyphenated UUID, or `404` |
+| `GET http://localhost:5080/api/v1/instruments/{id}/daily-prices?from=YYYY-MM-DD&to=YYYY-MM-DD` | Saved history and stock-level refresh metadata; no provider calls |
+| `POST http://localhost:5080/api/v1/instruments/{id}/daily-prices/import` | Explicit synchronous import with JSON `from` and `to` |
 | `GET http://localhost:5080/openapi/v1.json` | API document, Development only |
 | `127.0.0.1:5432` | PostgreSQL 17.12, loopback only, Compose-managed named volume |
 
@@ -131,6 +135,14 @@ npm run test:e2e
 ```
 
 On a fresh Linux machine use `npx playwright install --with-deps chromium` if system libraries are missing. Playwright starts, polls and stops its own Next.js and ASP.NET Core processes on ports 3000 and 5080; the happy path calls the real health route. No PostgreSQL is needed for this **liveness** test or the frontend build. The [PR workflow](.github/workflows/foundation.yml) also provisions PostgreSQL for xUnit.
+
+The additional M04 browser journey requires the same disposable `TRADING_TEST_CONNECTION` as xUnit. With ports 3000/5080 free, from `frontend/`:
+
+```bash
+npm run test:e2e:prices
+```
+
+This starts real Next.js and ASP.NET Core/Kestrel with a uniquely named PostgreSQL schema. Only the upstream Massive HTTP handler is replaced in the **test assembly**; the production application has no simulated-provider switch. All prices are invented. The test imports, repeats, reloads, encounters an upstream error and retries, using real browser HTTP and database commits. Its host drops its schema on graceful shutdown. If a test host is forcibly killed, discard the owned disposable database after testing. The existing eight preview/liveness smoke tests remain independent of PostgreSQL. Both suites run in the PR workflow without live secrets.
 
 ## Configuration and troubleshooting
 
@@ -192,7 +204,7 @@ The import can be run twice: an existing MIC/symbol pair retains **all** its fie
 
 ### Query and failure examples
 
-Start the API with the same database configuration. Only GET routes exist:
+Start the API with the same database configuration. Catalogue routes remain GET-only:
 
 ```bash
 base=http://localhost:5080
@@ -219,3 +231,67 @@ HTTP cancellation flows through Application into EF Core. Connection timeout is 
 For an outage check, stop only your owned local PostgreSQL with `docker compose stop postgres`: health remains `200`, readiness becomes `503`, and catalogue reads return safe `500`. Run `docker compose up -d --wait --wait-timeout 60 postgres` to recover without restarting the API. Restart the API separately and query the same UUID to confirm durability. Do not remove the development volume.
 
 See the [architecture](docs/architecture.md), [engineering standards](docs/engineering-standards.md) and [milestone index](docs/milestones.md) for specifications and verification reports.
+
+## Daily price history (Milestone 4)
+
+### Explicit schema and real-listing setup
+
+Migration `20261128153241_DailyPrices` adds `DailyPrices` and `DailyPriceRefreshes`; it does not alter or seed the catalogue. Follow [Apply the schema explicitly](#apply-the-schema-explicitly) to review SQL, identify the intended local database, apply both migrations, then run the update again to confirm no pending changes. Neither startup nor the launcher migrates or imports.
+
+After migrating, positively identify the intended Compose database and opt in to [real listings](infrastructure/seed/real-instruments.sql):
+
+```bash
+docker compose exec -T postgres sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "SELECT current_database();"'
+docker compose exec -T postgres sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' \
+  < infrastructure/seed/real-instruments.sql
+```
+
+For a separately configured disposable instance use `psql -v ON_ERROR_STOP=1 -f infrastructure/seed/real-instruments.sql` with explicit loopback `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER` and an ignored password file. Run the script twice to verify repeatability.
+
+| Reserved UUID | Listing | Currency |
+| --- | --- | --- |
+| `20000000-0000-0000-0000-000000000001` | AAPL / XNAS (Apple) | USD |
+| `20000000-0000-0000-0000-000000000002` | MSFT / XNAS (Microsoft) | USD |
+
+The script creates non-sample listings only, with no prices. A compatible existing MIC/symbol retains its UUID and other fields. A reserved UUID attached to another identity, sample flag or incompatible currency aborts the entire transaction. Inspect and resolve the conflict deliberately; never reclassify a sample or delete existing data to force setup. The fictional M03 seed and browser previews are unchanged. Import mapping is explicit: only non-sample XNAS/AAPL/USD and XNAS/MSFT/USD.
+
+### Provider configuration and browser workflow
+
+The owner approved **US-listed stocks and Massive Stocks Basic** for personal local use. A key is optional for startup, tests and stored reads. To make live imports, add `Massive__ApiKey` to the ignored **backend/.env** with your authorized personal key; never put it in frontend settings, `NEXT_PUBLIC_*`, SQL or command-line arguments. The example leaves it empty. Restart the API after configuration changes. Check plan coverage, current storage rights and both listings against Massive reference information during live setup.
+
+1. Start `./scripts/dev.sh` and open Dashboard -> **Price history**.
+2. Choose a listing (symbol, MIC, currency and sample status are shown). Use **Next listings** for another catalogue page. Empty/unsupported catalogues show setup guidance.
+3. Select inclusive calendar dates. The default is the last 30 calendar days ending yesterday in **America/New_York**, not the browser's timezone. Imports allow at most 366 days and must start within two calendar years. Today's unfinished session is not importable. GET may read older stored data while licensed.
+4. Click **Import daily prices** explicitly. One request imports one stock/range. An unchanged repeat returns zero inserted/updated and counts unchanged rows. A correction updates only its stock/date; dates absent from the response are retained.
+5. Inspect the newest-first OHLCV table, USD, **Massive · Unadjusted daily prices**, latest session in this view, and **Last successful refresh for this stock** with UTC time/range. Stock and date choices are in the URL for reload. No key is needed to reopen saved results.
+
+No daily bars are manufactured for holidays or other empty intervals. A successful empty response advances the stock's last successful refresh but leaves saved bars intact. A refresh describes only the last checked request range, not freshness of every stored date. These are provider daily aggregates, not official closing auction prices. Raw/unadjusted prices can jump after splits; adjusted history and charts are out of scope.
+
+### Contracts, limits and recovery
+
+Both routes use canonical nonempty hyphenated UUIDs. Imports require `application/json`:
+
+```json
+{"from":"2026-11-23","to":"2026-11-24"}
+```
+
+Use a recent completed range within the current entitlement window, rather than assuming the example remains valid.
+
+- POST returns `instrumentId`, `source`, `from`, `to`, `inserted`, `updated`, `unchanged`, `lastRefreshedAtUtc`.
+- GET returns `instrumentId`, `currency`, `canImport`, `items`, `source`, `priceBasis`, `lastRefreshedAtUtc`, `lastRefreshFrom`, `lastRefreshTo`. Each item has `tradingDate`, `open`, `high`, `low`, `close`, `volume`. OHLCV are invariant decimal **strings**, not JavaScript numbers; storage is exact `numeric(28,10)`, including fractional volume. Source/basis and refresh fields are null before first success. An empty range is a successful 200.
+- GET uses a consistent database snapshot and `Cache-Control: no-store`, without provider traffic. A successful import triggers a fresh read. Failed imports retain saved rows and last successful metadata.
+- One process-wide rolling budget allows **five outbound attempts per minute**, including failures. The fixed HTTPS Massive request uses bearer authentication, raw daily bars, ascending dates and limit 50000. No redirects, continuation following, retries or demo fallback. Timeout: ten seconds; response buffer: 1 MiB. Malformed, duplicate, out-of-range, rounded or incomplete results never partially persist.
+- Writers lock the selected instrument row before comparing rows, then commit bars and monotonic UTC refresh together. A disconnect after commit may have succeeded: retrying is safe.
+- JSON POST CORS is scoped to daily-price routes on the existing explicit loopback UI origins. Foreign supplied browser origins are rejected. Local clients without an Origin are accepted. Other catalogue/health CORS remains GET/Accept only.
+
+| HTTP | Recovery |
+| --- | --- |
+| 400 | Correct UUID, required exact dates, repeated query values or range bounds. |
+| 404 / 422 | Choose an existing supported non-sample listing; run the opt-in setup if needed. |
+| 403 / 415 | Use the configured localhost UI origin and JSON media type. |
+| 429 | Wait for the displayed `Retry-After` delay; the limit is shared across stocks and browser tabs. |
+| 503 | Configure the backend key or resolve Massive entitlement; stored reads still work. |
+| 502 / 504 | Provider failure/incomplete response or timeout. Retry manually later. |
+| 500 | Check local PostgreSQL and explicitly applied migrations; errors intentionally omit SQL and credentials. |
+
+Keep live prices private under the account's market-data terms, including deletion requirements when entitlement ends. Do not commit live responses or prices as test fixtures. The [M04 checklist](docs/milestones/04-daily-price-history-verification.md) records synthetic verification separately from the still-required authorized live walkthrough and hosted/owner review.
