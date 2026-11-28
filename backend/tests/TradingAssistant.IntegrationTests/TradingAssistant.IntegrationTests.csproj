@@ -1,4 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <GenerateProgramFile>false</GenerateProgramFile>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -8,5 +12,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="../../../infrastructure/seed/sample-instruments.sql" Link="sample-instruments.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../../infrastructure/seed/real-instruments.sql" Link="real-instruments.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

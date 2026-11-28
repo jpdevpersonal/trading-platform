@@ -31,8 +31,10 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: dotnet restore --locked-mode
+      - run: dotnet tool restore
       - run: dotnet build --no-restore
       - run: dotnet format --verify-no-changes --no-restore
+      - run: dotnet ef migrations has-pending-model-changes --project backend/src/TradingAssistant.Infrastructure --startup-project backend/src/TradingAssistant.Api --no-build
       - run: dotnet test --no-build
         env:
           TRADING_TEST_CONNECTION: Host=127.0.0.1;Port=55432;Database=trading_assistant_test;Username=trading_test;Password=dummy_test_only
@@ -46,8 +48,17 @@ jobs:
           npm run typecheck
           npm run test
           npm run build
+      - name: Launcher regressions
+        run: |
+          bash -n scripts/dev.sh
+          node --test scripts/dev.test.mjs
       - name: Chromium smoke test with live application servers
         working-directory: frontend
         run: |
           npx playwright install --with-deps chromium
           npm run test:e2e
+      - name: Daily price workflow with real PostgreSQL and synthetic upstream
+        working-directory: frontend
+        env:
+          TRADING_TEST_CONNECTION: Host=127.0.0.1;Port=55432;Database=trading_assistant_test;Username=trading_test;Password=dummy_test_only
+        run: npm run test:e2e:prices

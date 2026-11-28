@@ -20,6 +20,10 @@ export default function Dashboard() {
         </ul>
       </section>
       <ConnectionStatus />
+      <section aria-labelledby="prices-title" className="panel mt-6">
+        <h2 id="prices-title" className="text-xl font-semibold"><Link href="/price-history" className="text-teal-800 underline">Price history</Link></h2>
+        <p>Select a real listing, manually import daily prices, and revisit saved history.</p>
+      </section>
     </>
   );
 }

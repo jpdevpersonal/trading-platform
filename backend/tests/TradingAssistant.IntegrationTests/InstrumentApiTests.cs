@@ -27,7 +27,7 @@ public class InstrumentApiTests
         await database.MigrateAsync();
         await database.MigrateAsync();
         await using var context = database.CreateContext();
-        Assert.Single(await context.Database.GetAppliedMigrationsAsync());
+        Assert.Equal(2, (await context.Database.GetAppliedMigrationsAsync()).Count());
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
         using var page = JsonDocument.Parse(await client.GetStringAsync("/api/v1/instruments"));
         AssertPage(page.RootElement, 0, 50, []);

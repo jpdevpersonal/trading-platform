@@ -5,6 +5,7 @@
 | M01 | [Project Foundation](milestones/01-foundation.md) | [Verified locally](milestones/01-foundation-verification.md); hosted PR checks and owner review pending |
 | M02 | [Application Shell](milestones/02-application-shell.md) | [Verified locally](milestones/02-application-shell-verification.md); hosted PR checks and owner review pending |
 | M03 | [Backend API and database](milestones/03-backend-api-and-database.md) | [Verified locally](milestones/03-backend-api-and-database-verification.md); hosted PR checks and owner review pending |
+| M04 | [Daily price history](milestones/04-daily-price-history.md) | [Locally verified](milestones/04-daily-price-history-verification.md): 18 Pass; live provider check Blocked; hosted verification and owner review Pending |
 
 Use the [milestone template](milestones/_template.md) to define the next milestone. Assign stable acceptance IDs and record verification in the completion report. Subsequent feature scope is agreed milestone by milestone.
 
